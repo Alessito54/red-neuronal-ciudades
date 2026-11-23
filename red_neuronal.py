@@ -1,10 +1,11 @@
-# Red neuronal en numpy desde cero, entrenada con coordenadas.
+# Red neuronal en numpy desde cero, entrenada con puntos GPS (lat, lon).
 # Clase 0 = Orizaba, México (R = 2). Clase 1 = París, Francia (R = 0.5).
-# Basado en el código de referencia "excel demo"; la lógica de la red no cambia.
+# Los puntos son simulados, alrededor de las coordenadas reales de cada ciudad.
+# La lógica de la red es la del código de referencia "excel demo".
 #
 # Uso:
-#   python red_neuronal.py            -> 150 + 150 puntos, lr = 0.001
-#   python red_neuronal.py --validar  -> 20 puntos fijos del Excel, lr = 0.01 (prueba de validación)
+#   python red_neuronal.py            -> 150 + 150 puntos GPS, lr = 0.01, 2 épocas
+#   python red_neuronal.py --validar  -> 20 puntos fijos del Excel, lr = 0.01, 2 épocas
 
 import math
 import sys
@@ -15,6 +16,10 @@ from scipy import stats
 VALIDAR = "--validar" in sys.argv
 
 np.random.seed(42)
+
+ORIZABA = (18.85, -97.10)  # lat, lon
+PARIS = (48.86, 2.35)      # lat, lon
+ESCALA = 50                # divide el desplazamiento, como en el ejemplo del PDF (/ [50, 50])
 
 sigmoid = (
     lambda x: 1 / (1 + np.exp(-x)),
@@ -34,7 +39,8 @@ relu = (
 )
 
 
-def circulo(num_datos=100, R=1, minimo=0, maximo=1):
+def circulo(centro, num_datos=100, R=1, minimo=0, maximo=1, escala=ESCALA):
+    # centro = (lat, lon). El desplazamiento se genera igual que antes y luego se divide entre escala.
     pi = math.pi
     r = R * np.sqrt(stats.truncnorm.rvs(minimo, maximo, size=num_datos)) * 10
     theta = stats.truncnorm.rvs(minimo, maximo, size=num_datos) * 2 * pi * 10
@@ -45,10 +51,12 @@ def circulo(num_datos=100, R=1, minimo=0, maximo=1):
     x = x.reshape((num_datos, 1))
 
     # Se reduce la precisión para no causar overflow
-    x = np.round(x, 3)
-    y = np.round(y, 3)
+    x = np.round(x, 3) / escala
+    y = np.round(y, 3) / escala
 
-    df = np.column_stack([x, y])
+    lat = centro[0] + y
+    lon = centro[1] + x
+    df = np.column_stack([lat, lon])
     return df
 
 
@@ -100,9 +108,10 @@ class capa:
 
 
 if VALIDAR:
-    # 20 puntos fijos del Excel de referencia (10 por clase)
+    # 20 puntos fijos del Excel de referencia (10 por clase), lr = 0.01, 2 épocas
     N = 10
     LR = 0.01
+    EPOCAS = 2
     X = np.array([
         [-2.848, 5.975], [-10.429, -8.024], [-1.284, 2.872], [4.758, 5.955],
         [-3.938, -5.78], [8.525, 17.866], [-13.715, 4.789], [-3.19, 13.309],
@@ -111,35 +120,43 @@ if VALIDAR:
         [2.238, -1.671], [-2.102, 1.924], [-1.059, 4.297], [2.642, 2.981],
     ])
 else:
-    # 150 puntos por ciudad
+    # 150 puntos GPS por ciudad, alrededor de las coordenadas reales
     N = 150
-    LR = 0.001
-    datos_1 = circulo(num_datos=N, R=2)     # clase 0: Orizaba
-    datos_2 = circulo(num_datos=N, R=0.5)   # clase 1: París
+    LR = 0.01
+    EPOCAS = 2  # igual que la validación del PDF y el Excel de referencia
+    datos_1 = circulo(ORIZABA, num_datos=N, R=2)   # clase 0
+    datos_2 = circulo(PARIS, num_datos=N, R=0.5)   # clase 1
     X = np.concatenate([datos_1, datos_2])
-    X = np.round(X, 3)
+    X = np.round(X, 6)
 
 Y = [0] * N + [1] * N
 Y = np.array(Y).reshape(len(Y), 1)
 
 neuronas = [2, 4, 8, 1]
 funciones_activacion = [relu, relu, sigmoid]
-red_neuronal = []
 
-for paso in range(len(neuronas) - 1):
-    red_neuronal.append(capa(neuronas[paso], neuronas[paso + 1], funciones_activacion[paso]))
+
+def construir_red():
+    red = []
+    for paso in range(len(neuronas) - 1):
+        red.append(capa(neuronas[paso], neuronas[paso + 1], funciones_activacion[paso]))
+    return red
+
 
 error = []
 predicciones = []
 
-for epoch in range(0, 1):
+for epoch in range(0, EPOCAS):
+    # Cada época arranca con pesos 0.75 y sesgos 0.25, como en el Excel de referencia
+    red_neuronal = construir_red()
     ronda = entrenamiento(epoch, X=X, Y=Y, red_neuronal=red_neuronal, lr=LR)
     predicciones.append(ronda)
     temp = mse(np.round(predicciones[-1]), Y)[0]
     error.append(temp)
+    print(f"Época {epoch}: última capa W = {red_neuronal[-1].W.ravel()[0]:.8f}, b = {red_neuronal[-1].b.ravel()[0]:.8f}")
 
-print(f"lr = {LR}, puntos por clase = {N}")
-print("Error MSE por época:", error)
+print(f"lr = {LR}, épocas = {EPOCAS}, puntos por clase = {N}")
+print("Error MSE por época:", [float(e) for e in error])
 print("Predicciones clase 0:", predicciones[-1][:N].ravel().round(4))
 print("Predicciones clase 1:", predicciones[-1][N:].ravel().round(4))
 print("Exactitud:", np.mean(np.round(predicciones[-1]) == Y))
@@ -147,9 +164,6 @@ print("Exactitud:", np.mean(np.round(predicciones[-1]) == Y))
 for i, c in enumerate(red_neuronal):
     print(f"Capa {i} W:\n{c.W}\nCapa {i} b:\n{c.b}")
 
-print("Última capa W (primeros 4):", red_neuronal[-1].W.ravel()[:4])
-print("Última capa b:", red_neuronal[-1].b.ravel())
-
 if not VALIDAR:
     np.savetxt("datos_entrenamiento.csv", np.column_stack([X, Y]), delimiter=",",
-               header="x,y,clase", comments="", fmt="%.3f")
+               header="lat,lon,clase", comments="", fmt="%.6f")
