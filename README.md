@@ -67,9 +67,6 @@ python red_neuronal.py
 | `resultados_corrida.md` | Parámetros, caso A (validación) y caso B (entrenamiento) por época: forward, backprop, pesos y sesgos nuevos, MSE y predicciones. |
 | `requirements.txt` | Versiones exactas (`pip freeze`). |
 
-`generar_entregables.py`, `resultados.xlsx` y `reporte.pdf` corresponden a la versión anterior
-(puntos alrededor del origen, lr = 0.001, 1 época) y están desactualizados.
-
 ## Resultado del entrenamiento (caso B)
 
 | Época | W[0] última capa | b última capa | MSE | Exactitud |
