@@ -1,16 +1,19 @@
 # Red neuronal en numpy desde cero, entrenada con puntos GPS (lat, lon).
 # Clase 0 = Orizaba, México (R = 2). Clase 1 = París, Francia (R = 0.5).
-# Los puntos son simulados, alrededor de las coordenadas reales de cada ciudad.
+# Los puntos son simulados alrededor de las coordenadas reales de cada ciudad.
 # La lógica de la red es la del código de referencia "excel demo".
 #
 # Uso:
-#   python red_neuronal.py            -> 150 + 150 puntos GPS, lr = 0.01, 2 épocas
-#   python red_neuronal.py --validar  -> 20 puntos fijos del Excel, lr = 0.01, 2 épocas
+#   python neural_network_numpy.py              -> 150 + 150 puntos GPS, lr = 0.01, 2 épocas
+#   python neural_network_numpy.py --validar    -> 20 puntos fijos del Excel, lr = 0.01, 2 épocas
+#   streamlit run neural_network_numpy.py       -> mapa de los puntos GPS en Streamlit
 
 import math
 import sys
 
 import numpy as np
+import pandas as pd
+import streamlit as st
 from scipy import stats
 
 VALIDAR = "--validar" in sys.argv
@@ -19,7 +22,7 @@ np.random.seed(42)
 
 ORIZABA = (18.85, -97.10)  # lat, lon
 PARIS = (48.86, 2.35)      # lat, lon
-ESCALA = 50                
+ESCALA = 50                # divide el desplazamiento, como en el ejemplo de la diapositiva (/ [50, 50])
 
 sigmoid = (
     lambda x: 1 / (1 + np.exp(-x)),
@@ -40,7 +43,7 @@ relu = (
 
 
 def circulo(centro, num_datos=100, R=1, minimo=0, maximo=1, escala=ESCALA):
-    # centro = (lat, lon). El desplazamiento se genera igual que antes y luego se divide entre escala.
+    # centro = (lat, lon). El desplazamiento se genera igual que el original y luego se divide entre escala.
     pi = math.pi
     r = R * np.sqrt(stats.truncnorm.rvs(minimo, maximo, size=num_datos)) * 10
     theta = stats.truncnorm.rvs(minimo, maximo, size=num_datos) * 2 * pi * 10
@@ -174,3 +177,16 @@ if not VALIDAR:
              **{f"b{i}": c.b for i, c in enumerate(red_neuronal)},
              neuronas=np.array(neuronas))
     print("Modelo guardado en modelo.npz")
+
+# ---------------------------------------------------------------------------
+# Mapa con Streamlit (solo se muestra con: streamlit run neural_network_numpy.py)
+# ---------------------------------------------------------------------------
+if not VALIDAR:
+    map_data = pd.DataFrame(X, columns=['lat', 'lon'])
+
+    # Create the title for the web app
+    st.title("Orizaba y París: puntos GPS")
+    st.header("Using Streamlit and numpy")
+
+    # Mostrar el conjunto de datos GPS en el mapa
+    st.map(map_data)
