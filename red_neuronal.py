@@ -19,7 +19,7 @@ np.random.seed(42)
 
 ORIZABA = (18.85, -97.10)  # lat, lon
 PARIS = (48.86, 2.35)      # lat, lon
-ESCALA = 50                # divide el desplazamiento, como en el ejemplo del PDF (/ [50, 50])
+ESCALA = 50                
 
 sigmoid = (
     lambda x: 1 / (1 + np.exp(-x)),
@@ -167,3 +167,10 @@ for i, c in enumerate(red_neuronal):
 if not VALIDAR:
     np.savetxt("datos_entrenamiento.csv", np.column_stack([X, Y]), delimiter=",",
                header="lat,lon,clase", comments="", fmt="%.6f")
+
+    # Modelo para el servidor: W y b de las tres capas después de la última época
+    np.savez("modelo.npz",
+             **{f"W{i}": c.W for i, c in enumerate(red_neuronal)},
+             **{f"b{i}": c.b for i, c in enumerate(red_neuronal)},
+             neuronas=np.array(neuronas))
+    print("Modelo guardado en modelo.npz")
