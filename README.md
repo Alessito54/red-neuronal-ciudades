@@ -2,7 +2,7 @@
 
 Práctica del curso **Introducción a Deep Learning**: una red neuronal escrita desde cero en numpy
 que clasifica puntos GPS (lat, lon) en dos ciudades. La red se sirve con Flask, se empaqueta en
-Docker y se despliega en Kubernetes (kind) y en Okteto. Un cliente en Python manda puntos al servidor.
+Docker y se despliega en Kubernetes (kind). Un cliente en Python manda puntos al servidor.
 
 ## Ciudades
 
@@ -45,7 +45,6 @@ Como los pesos se reinician en cada época, las dos épocas dan exactamente el m
 | `k8s/kind-config.yaml` | Clúster kind: 1 control-plane y 2 workers; publica el puerto 30080 en el host. |
 | `k8s/deployment.yaml` | Deployment `red-gps`: 2 réplicas, readinessProbe en `/health`. |
 | `k8s/service.yaml` | Service NodePort en el puerto 30080. |
-| `okteto.yml`, `k8s/okteto/ingress.yaml` | Despliegue en Okteto; el Ingress lleva `dev.okteto.com/generate-host: "true"` para que Okteto genere la URL pública. |
 | `requirements.txt` | Versiones exactas para el entorno local (red, servidor y gráficas). |
 
 ### Resultados (no se versionan)
@@ -145,22 +144,6 @@ MODEL_URL=http://localhost:30080/predict python linear_model.py 0.1 1.0 2.71 3.1
 
 El puerto 30080 del NodePort queda publicado en el host por `extraPortMappings` en
 `k8s/kind-config.yaml`. Para borrar el clúster: `kind delete cluster --name red-gps`.
-
-## 5. Okteto
-
-```bash
-okteto context use https://cloud.okteto.com    # o la URL de tu instancia
-okteto deploy
-```
-
-`okteto deploy` construye la imagen con el `Dockerfile`, aplica `k8s/deployment.yaml`,
-`k8s/service.yaml` y `k8s/okteto/ingress.yaml`, cambia la imagen del Deployment por la que
-construyó Okteto (`OKTETO_BUILD_RED_GPS_IMAGE`) y espera a que esté listo. La URL pública aparece en
-el dashboard de Okteto (o con `kubectl get ingress red-gps`):
-
-```bash
-MODEL_URL=https://<host-generado-por-okteto>/predict python linear_model.py 0.1 1.0 2.71 3.14
-```
 
 ## Resultado del entrenamiento (caso B)
 
