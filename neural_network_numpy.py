@@ -168,7 +168,7 @@ for i, c in enumerate(red_neuronal):
     print(f"Capa {i} W:\n{c.W}\nCapa {i} b:\n{c.b}")
 
 if not VALIDAR:
-    np.savetxt("datos_entrenamiento.csv", np.column_stack([X, Y]), delimiter=",",
+    np.savetxt("dataset/datos_entrenamiento.csv", np.column_stack([X, Y]), delimiter=",",
                header="lat,lon,clase", comments="", fmt="%.6f")
 
     # Modelo para el servidor: W y b de las tres capas después de la última época
