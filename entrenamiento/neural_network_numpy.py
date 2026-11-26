@@ -1,28 +1,25 @@
 # Red neuronal en numpy desde cero, entrenada con puntos GPS (lat, lon).
-# Clase 0 = Orizaba, México (R = 2). Clase 1 = París, Francia (R = 0.5).
-# Los puntos son simulados alrededor de las coordenadas reales de cada ciudad.
+# Clase 0 = Orizaba, México. Clase 1 = París, Francia.
+# Los puntos se leen de dataset/orizaba.csv y dataset/paris.csv (columnas lat,lon,clase).
 # La lógica de la red es la del código de referencia "excel demo".
 #
-# Uso:
-#   python neural_network_numpy.py              -> 150 + 150 puntos GPS, lr = 0.01, 2 épocas
-#   python neural_network_numpy.py --validar    -> 20 puntos fijos del Excel, lr = 0.01, 2 épocas
-#   streamlit run neural_network_numpy.py       -> mapa de los puntos GPS en Streamlit
+# Uso (desde la raíz del repo o desde esta carpeta):
+#   python entrenamiento/neural_network_numpy.py              -> puntos de los CSV, lr = 0.01, 2 épocas
+#   python entrenamiento/neural_network_numpy.py --validar    -> 20 puntos fijos del Excel, lr = 0.01, 2 épocas
+#   streamlit run entrenamiento/neural_network_numpy.py       -> entrena y muestra el mapa en Streamlit
 
-import math
 import sys
+from pathlib import Path
 
 import numpy as np
-import pandas as pd
-import streamlit as st
-from scipy import stats
 
 VALIDAR = "--validar" in sys.argv
 
-np.random.seed(42)
-
-ORIZABA = (18.85, -97.10)  # lat, lon
-PARIS = (48.86, 2.35)      # lat, lon
-ESCALA = 50                # divide el desplazamiento, como en el ejemplo de la diapositiva (/ [50, 50])
+SCRIPT_DIR = Path(__file__).resolve().parent
+DATASET_DIR = SCRIPT_DIR.parent / "dataset"
+ORIZABA_PATH = DATASET_DIR / "orizaba.csv"   # clase 0
+PARIS_PATH = DATASET_DIR / "paris.csv"       # clase 1
+MODELO_PATH = SCRIPT_DIR / "modelo.npz"
 
 sigmoid = (
     lambda x: 1 / (1 + np.exp(-x)),
@@ -42,25 +39,12 @@ relu = (
 )
 
 
-def circulo(centro, num_datos=100, R=1, minimo=0, maximo=1, escala=ESCALA):
-    # centro = (lat, lon). El desplazamiento se genera igual que el original y luego se divide entre escala.
-    pi = math.pi
-    r = R * np.sqrt(stats.truncnorm.rvs(minimo, maximo, size=num_datos)) * 10
-    theta = stats.truncnorm.rvs(minimo, maximo, size=num_datos) * 2 * pi * 10
-    x = np.cos(theta) * r
-    y = np.sin(theta) * r
-
-    y = y.reshape((num_datos, 1))
-    x = x.reshape((num_datos, 1))
-
-    # Se reduce la precisión para no causar overflow
-    x = np.round(x, 3) / escala
-    y = np.round(y, 3) / escala
-
-    lat = centro[0] + y
-    lon = centro[1] + x
-    df = np.column_stack([lat, lon])
-    return df
+def cargar_csv(path):
+    # Devuelve (X, Y): X con columnas lat, lon; Y con la columna clase
+    datos = np.loadtxt(path, delimiter=",", skiprows=1)
+    if datos.ndim != 2 or datos.shape[1] != 3:
+        raise ValueError(f"{path.name} debe tener las columnas lat,lon,clase")
+    return datos[:, :2], datos[:, 2:3]
 
 
 def mse(Ypredich, Yreal):
@@ -112,7 +96,6 @@ class capa:
 
 if VALIDAR:
     # 20 puntos fijos del Excel de referencia (10 por clase), lr = 0.01, 2 épocas
-    N = 10
     LR = 0.01
     EPOCAS = 2
     X = np.array([
@@ -122,18 +105,17 @@ if VALIDAR:
         [-2.032, 1.092], [-1.476, -1.606], [-0.084, 3.386], [-1.618, 1.16],
         [2.238, -1.671], [-2.102, 1.924], [-1.059, 4.297], [2.642, 2.981],
     ])
+    Y = np.array([0] * 10 + [1] * 10).reshape(-1, 1)
 else:
-    # 150 puntos GPS por ciudad, alrededor de las coordenadas reales
-    N = 150
+    # Puntos GPS de los CSV del dataset
     LR = 0.01
     EPOCAS = 2  # igual que la validación del PDF y el Excel de referencia
-    datos_1 = circulo(ORIZABA, num_datos=N, R=2)   # clase 0
-    datos_2 = circulo(PARIS, num_datos=N, R=0.5)   # clase 1
-    X = np.concatenate([datos_1, datos_2])
-    X = np.round(X, 6)
+    X_orizaba, Y_orizaba = cargar_csv(ORIZABA_PATH)
+    X_paris, Y_paris = cargar_csv(PARIS_PATH)
+    X = np.concatenate([X_orizaba, X_paris])
+    Y = np.concatenate([Y_orizaba, Y_paris])
 
-Y = [0] * N + [1] * N
-Y = np.array(Y).reshape(len(Y), 1)
+N0 = int(np.sum(Y == 0))  # puntos de la clase 0 (van primero)
 
 neuronas = [2, 4, 8, 1]
 funciones_activacion = [relu, relu, sigmoid]
@@ -158,35 +140,44 @@ for epoch in range(0, EPOCAS):
     error.append(temp)
     print(f"Época {epoch}: última capa W = {red_neuronal[-1].W.ravel()[0]:.8f}, b = {red_neuronal[-1].b.ravel()[0]:.8f}")
 
-print(f"lr = {LR}, épocas = {EPOCAS}, puntos por clase = {N}")
+print(f"lr = {LR}, épocas = {EPOCAS}, puntos clase 0 = {N0}, puntos clase 1 = {len(Y) - N0}")
 print("Error MSE por época:", [float(e) for e in error])
-print("Predicciones clase 0:", predicciones[-1][:N].ravel().round(4))
-print("Predicciones clase 1:", predicciones[-1][N:].ravel().round(4))
+print("Predicciones clase 0:", predicciones[-1][:N0].ravel().round(4))
+print("Predicciones clase 1:", predicciones[-1][N0:].ravel().round(4))
 print("Exactitud:", np.mean(np.round(predicciones[-1]) == Y))
 
 for i, c in enumerate(red_neuronal):
     print(f"Capa {i} W:\n{c.W}\nCapa {i} b:\n{c.b}")
 
 if not VALIDAR:
-    np.savetxt("dataset/datos_entrenamiento.csv", np.column_stack([X, Y]), delimiter=",",
-               header="lat,lon,clase", comments="", fmt="%.6f")
-
-    # Modelo para el servidor: W y b de las tres capas después de la última época
-    np.savez("modelo.npz",
+    # Modelo: W y b de las tres capas después de la última época
+    np.savez(MODELO_PATH,
              **{f"W{i}": c.W for i, c in enumerate(red_neuronal)},
              **{f"b{i}": c.b for i, c in enumerate(red_neuronal)},
              neuronas=np.array(neuronas))
-    print("Modelo guardado en modelo.npz")
+    print(f"Modelo guardado en {MODELO_PATH}")
+
 
 # ---------------------------------------------------------------------------
-# Mapa con Streamlit (solo se muestra con: streamlit run neural_network_numpy.py)
+# Mapa con Streamlit (solo se muestra con: streamlit run entrenamiento/neural_network_numpy.py)
 # ---------------------------------------------------------------------------
-if not VALIDAR:
-    map_data = pd.DataFrame(X, columns=['lat', 'lon'])
+def corriendo_en_streamlit():
+    try:
+        from streamlit.runtime import exists
+    except ImportError:
+        return False
+    return exists()
 
-    # Create the title for the web app
+
+if not VALIDAR and corriendo_en_streamlit():
+    import pandas as pd
+    import streamlit as st
+
+    map_data = pd.DataFrame(X, columns=["lat", "lon"])
+
     st.title("Orizaba y París: puntos GPS")
     st.header("Using Streamlit and numpy")
+    st.write(f"Exactitud de la red: {np.mean(np.round(predicciones[-1]) == Y):.2f}")
 
     # Mostrar el conjunto de datos GPS en el mapa
     st.map(map_data)

@@ -1,0 +1,12 @@
+# TensorFlow Serving para Apple Silicon (arm64) con el modelo Orizaba/París
+# que exporta entrenamiento/gps_tensorflow_keras.py en entrenamiento/gps-classifier/1.
+# Construir desde la raíz del repo:
+#   docker build -f entrenamiento/Dockerfile.serving -t alessandro117/gps-orizaba-paris .
+FROM bitnamilegacy/tensorflow-serving:latest
+
+COPY entrenamiento/gps-classifier /models/gps-classifier
+
+EXPOSE 8500 8501
+
+ENTRYPOINT ["tensorflow_model_server", "--port=8500", "--rest_api_port=8501", \
+            "--model_name=gps-classifier", "--model_base_path=/models/gps-classifier"]

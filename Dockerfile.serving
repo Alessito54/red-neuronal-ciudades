@@ -1,0 +1,11 @@
+# TensorFlow Serving para Apple Silicon (arm64).
+# La imagen oficial tensorflow/serving solo existe para amd64 y truena
+# con "Illegal instruction" en Macs con chip Apple.
+FROM bitnamilegacy/tensorflow-serving:latest
+
+COPY gps-classifier /models/gps-classifier
+
+EXPOSE 8500 8501
+
+ENTRYPOINT ["tensorflow_model_server", "--port=8500", "--rest_api_port=8501", \
+            "--model_name=gps-classifier", "--model_base_path=/models/gps-classifier"]
