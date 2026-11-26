@@ -1,26 +1,27 @@
 # red-neuronal-ciudades
 
 Práctica del curso **Introducción a Deep Learning**: una red neuronal escrita desde cero en numpy
-que clasifica puntos GPS (lat, lon) en dos ciudades. La red se sirve con Flask, se empaqueta en
-Docker y se despliega en Kubernetes (kind). Un cliente en Python manda puntos al servidor.
+que clasifica puntos GPS (lat, lon) en dos ciudades, la misma red hecha con TensorFlow/Keras, y
+su despliegue: Flask + Docker + Kubernetes (kind) para numpy, y TensorFlow Serving para Keras.
+
+> Guía rápida de comandos para probar todo después de prender la PC:
+> [`entrenamiento/COMO_PROBAR.md`](entrenamiento/COMO_PROBAR.md).
 
 ## Ciudades
 
-| Clase | Ciudad | Centro (lat, lon) | Radio |
+| Clase | Ciudad | Centro (lat, lon) | Datos |
 |---|---|---|---|
-| 0 | Orizaba, México | (18.85, −97.10) | R = 2 |
-| 1 | París, Francia | (48.86, 2.35) | R = 0.5 |
+| 0 | Orizaba, México | (18.85, −97.10) | `dataset/orizaba.csv` (300 puntos) |
+| 1 | París, Francia | (48.86, 2.35) | `dataset/paris.csv` (300 puntos) |
 
-Los puntos son simulados alrededor de las coordenadas reales de cada ciudad. La función `circulo`
-genera el desplazamiento igual que el código de referencia, lo divide entre **50** (escala /50,
-como el ejemplo del PDF) y se lo suma al centro: `lat = centro_lat + y/50`, `lon = centro_lon + x/50`.
+Los dos CSV tienen las columnas `lat,lon,clase`. Los scripts de `entrenamiento/` toman la clase de
+la columna `clase`.
 
-## Configuración
+## Configuración (red en numpy)
 
 | Parámetro | Valor |
 |---|---|
-| Semilla | `np.random.seed(42)` |
-| Puntos por clase | 150 (300 en total) |
+| Puntos por clase | 300 (600 en total), de los CSV |
 | lr | 0.01 |
 | Épocas | 2 |
 | Arquitectura | [2, 4, 8, 1] |
@@ -35,9 +36,14 @@ Como los pesos se reinician en cada época, las dos épocas dan exactamente el m
 
 | Archivo | Contenido |
 |---|---|
-| `red_neuronal.py` | La red y la generación de los puntos GPS. Al entrenar escribe `datos_entrenamiento.csv` y `modelo.npz`. |
-| `datos_entrenamiento.csv` | Los 300 puntos de entrenamiento (lat, lon, clase). |
-| `modelo.npz` | W y b de las tres capas después de la última época (`W0`, `b0`, `W1`, `b1`, `W2`, `b2`) y la arquitectura (`neuronas`). |
+| `dataset/orizaba.csv`, `dataset/paris.csv` | Puntos de entrenamiento (lat, lon, clase). |
+| `entrenamiento/neural_network_numpy.py` | Red en numpy desde cero. Lee los CSV, entrena y escribe `entrenamiento/modelo.npz`. Con `streamlit run` muestra el mapa. |
+| `entrenamiento/gps_tensorflow_keras.py` | La misma arquitectura con Keras (Adam, 300 épocas). Guarda `entrenamiento/gps_classifier.keras` y exporta `entrenamiento/gps-classifier/1/` para TF Serving. |
+| `entrenamiento/tensorflow-20.py` | La red del Excel (20 puntos fijos) con TensorFlow y `GradientTape`. Salida legible; `--json` la da en JSON. |
+| `entrenamiento/Dockerfile.serving` | Imagen de TF Serving (Bitnami, arm64) con el modelo Keras de Orizaba/París. |
+| `entrenamiento/COMO_PROBAR.md` | Guía de comandos para correr y probar todo. |
+| `modelo.npz` | Modelo numpy que usa el servidor Flask (`W0`, `b0`, `W1`, `b1`, `W2`, `b2` y `neuronas`). Para servir el nuevo, copia `entrenamiento/modelo.npz` aquí. |
+| `gps_tensorflow_keras.py`, `gps_classifier.keras`, `gps-classifier/`, `Dockerfile.serving` | Versión anterior del clasificador Keras, entrenada con `dataset/city1.csv` y `dataset/city2.csv`. |
 | `app/server.py` | Servidor Flask: `GET /health` y `POST /predict`. |
 | `app/requirements.txt` | Dependencias del servidor (Flask, gunicorn, numpy). Las usa el Dockerfile. |
 | `linear_model.py` | Cliente: manda pares (lat, lon) a `/predict`. Solo biblioteca estándar. |
@@ -71,18 +77,40 @@ pip install -r requirements.txt
 
 ### Validar y entrenar
 
+Desde la raíz del repo:
+
 ```bash
 # Validación: 20 puntos fijos del Excel, lr = 0.01, 2 épocas (no escribe archivos)
-python red_neuronal.py --validar
+python entrenamiento/neural_network_numpy.py --validar
+python entrenamiento/tensorflow-20.py           # lo mismo con TensorFlow
 #    En las dos épocas la última capa debe dar W = 0.74906805 y b = 0.24981331.
 
-# Entrenamiento: 150 + 150 puntos GPS, lr = 0.01, 2 épocas
-python red_neuronal.py
-#    Escribe datos_entrenamiento.csv (300 filas: lat, lon, clase) y modelo.npz.
-#    SHA-256 esperado del CSV: 020789e3e7569bee61a15a6570e92e5c630d70346b6b83b221b3c12209802775
+# Entrenamiento numpy: 300 + 300 puntos de los CSV, lr = 0.01, 2 épocas
+python entrenamiento/neural_network_numpy.py
+#    Escribe entrenamiento/modelo.npz.
+
+# Mapa de los puntos en Streamlit (puerto 8502 para no chocar con TF Serving)
+streamlit run entrenamiento/neural_network_numpy.py --server.port 8502
+
+# Entrenamiento Keras: 300 + 300 puntos de los CSV, Adam, 300 épocas
+python entrenamiento/gps_tensorflow_keras.py
+#    Escribe entrenamiento/gps_classifier.keras y entrenamiento/gps-classifier/1/.
 ```
 
-`modelo.npz` ya viene en el repo; solo hace falta volver a entrenar si cambia la red.
+Los modelos entrenados ya vienen en el repo; solo hace falta volver a entrenar si cambia la red.
+
+### TensorFlow Serving (modelo Keras)
+
+```bash
+docker build -f entrenamiento/Dockerfile.serving -t alessandro117/gps-orizaba-paris .
+docker run -d --name my_serving_base -p 8501:8501 alessandro117/gps-orizaba-paris
+
+curl http://localhost:8501/v1/models/gps-classifier          # "state": "AVAILABLE"
+curl -X POST http://localhost:8501/v1/models/gps-classifier:predict \
+     -H 'Content-Type: application/json' \
+     -d '{"instances": [[18.85, -97.10], [48.86, 2.35]]}'
+#    ~0 = Orizaba (clase 0), ~1 = París (clase 1)
+```
 
 ### Servidor
 
@@ -145,13 +173,21 @@ MODEL_URL=http://localhost:30080/predict python linear_model.py 0.1 1.0 2.71 3.1
 El puerto 30080 del NodePort queda publicado en el host por `extraPortMappings` en
 `k8s/kind-config.yaml`. Para borrar el clúster: `kind delete cluster --name red-gps`.
 
-## Resultado del entrenamiento (caso B)
+## Resultado del entrenamiento
+
+### Red en numpy (`dataset/orizaba.csv` + `dataset/paris.csv`)
 
 | Época | W[0] última capa | b última capa | MSE | Exactitud |
 |---|---|---|---|---|
-| 0 | 0.70970394 | 0.24946272 | 0.5 | 0.5 |
-| 1 | 0.70970394 | 0.24946272 | 0.5 | 0.5 |
+| 0 | 0.66940789 | 0.24946272 | 0.5 | 0.5 |
+| 1 | 0.66940789 | 0.24946272 | 0.5 | 0.5 |
 
 Con lr = 0.01, pesos iniciales iguales y reinicio en cada época, la red todavía no separa las
-clases: todos los puntos se clasifican como clase 1 (París). Por eso el servidor también responde
-clase 1 para los centros de las dos ciudades (Orizaba da probabilidad 0.84).
+clases: todos los puntos se clasifican como clase 1 (París). El servidor Flask (con el
+`modelo.npz` de la raíz, de la versión anterior) también responde clase 1 para los centros de las
+dos ciudades (Orizaba da probabilidad 0.84).
+
+### Red en Keras (mismos CSV)
+
+Adam (lr = 0.01), 300 épocas, pesos aleatorios: **exactitud = 1.0**. Orizaba da probabilidad
+~1.6e-08 y París ~0.9999999, tanto en local como en TF Serving.

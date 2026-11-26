@@ -1,4 +1,13 @@
+# Red [2, 4, 8, 1] con TensorFlow sobre los 20 puntos fijos del Excel de referencia.
+# Misma lógica que entrenamiento/neural_network_numpy.py --validar.
+#
+# Uso:
+#   python entrenamiento/tensorflow-20.py          -> salida legible
+#   python entrenamiento/tensorflow-20.py --json   -> salida en JSON (una línea)
+
 import json
+import sys
+
 import numpy as np
 import tensorflow as tf
 
@@ -34,6 +43,16 @@ def forward(capas, x):
     return a
 
 
+COMO_JSON = "--json" in sys.argv
+NOMBRES_CAPAS = ["Capa 0 (2 -> 4, relu)", "Capa 1 (4 -> 8, relu)", "Capa 2 (8 -> 1, sigmoid)"]
+
+if not COMO_JSON:
+    print("=" * 60)
+    print("Red [2, 4, 8, 1] con TensorFlow (puntos del Excel)")
+    print(f"lr = {LR}   épocas = {EPOCAS}   puntos = {N} (10 por clase)")
+    print("Inicialización: W = 0.75, b = 0.25 (se reinicia en cada época)")
+    print("=" * 60)
+
 for epoca in range(EPOCAS):
     capas = construir_red()
     with tf.GradientTape() as tape:
@@ -44,11 +63,40 @@ for epoca in range(EPOCAS):
     for k, (W, b) in enumerate(capas):
         W.assign_sub(LR * grads[2 * k])
         b.assign_sub(LR * grads[2 * k + 1] / N)
+    if not COMO_JSON:
+        W_ultima = capas[-1][0].numpy().ravel()[0]
+        b_ultima = capas[-1][1].numpy().ravel()[0]
+        print(f"Época {epoca}: pérdida = {float(perdida):.8f}   "
+              f"última capa W = {W_ultima:.8f}, b = {b_ultima:.8f}")
 
 pred_final = forward(capas, X_t).numpy()
-salida = {
-    "pesos": {f"W{i}": W.numpy().tolist() for i, (W, _) in enumerate(capas)},
-    "sesgos": {f"b{i}": b.numpy().tolist() for i, (_, b) in enumerate(capas)},
-    "predicciones": pred_final.ravel().tolist(),
-}
-print(json.dumps(salida))
+
+if COMO_JSON:
+    salida = {
+        "pesos": {f"W{i}": W.numpy().tolist() for i, (W, _) in enumerate(capas)},
+        "sesgos": {f"b{i}": b.numpy().tolist() for i, (_, b) in enumerate(capas)},
+        "predicciones": pred_final.ravel().tolist(),
+    }
+    print(json.dumps(salida))
+    sys.exit()
+
+clases = np.round(pred_final)
+mse = float(np.mean((clases - Y) ** 2))
+exactitud = float(np.mean(clases == Y))
+
+print("\n--- Predicciones ---")
+print(f"{'#':>3}  {'x1':>8}  {'x2':>8}  {'real':>4}  {'salida':>10}  {'clase':>5}")
+for i, ((x1, x2), real, p, c) in enumerate(zip(X, Y.ravel(), pred_final.ravel(), clases.ravel())):
+    print(f"{i:>3}  {x1:>8.3f}  {x2:>8.3f}  {int(real):>4}  {p:>10.6f}  {int(c):>5}")
+
+print("\n--- Resultado ---")
+print(f"MSE (predicciones redondeadas) = {mse}")
+print(f"Exactitud = {exactitud}")
+
+print("\n--- Pesos y sesgos finales ---")
+for nombre, (W, b) in zip(NOMBRES_CAPAS, capas):
+    print(f"\n{nombre}")
+    print("W =")
+    print(np.array2string(W.numpy(), precision=8, suppress_small=True, max_line_width=120))
+    print("b =")
+    print(np.array2string(b.numpy(), precision=8, suppress_small=True, max_line_width=120))

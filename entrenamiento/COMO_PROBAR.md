@@ -16,6 +16,15 @@ python entrenamiento/neural_network_numpy.py --validar   # 20 puntos del Excel
 
 Con `--validar` la última capa debe dar `W = 0.74906805` y `b = 0.24981331`.
 
+La misma validación de 20 puntos, hecha con TensorFlow:
+
+```bash
+python entrenamiento/tensorflow-20.py          # salida legible (épocas, tabla de predicciones, pesos)
+python entrenamiento/tensorflow-20.py --json   # salida en JSON (una línea)
+```
+
+Debe dar los mismos `W = 0.74906805` y `b = 0.24981331` en la última capa.
+
 ## 2. Mapa en Streamlit
 
 ```bash
